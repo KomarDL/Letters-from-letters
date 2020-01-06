@@ -7,6 +7,7 @@ typedef struct _WindowData
 	HFONT hfDefault;
 	HFONT hfDrawing;
 	HFONT hfCapturingGlyph;
+	PWSTR szGlyph;
 } WindowData, *PWindowData;
 // Global variables
 
@@ -78,7 +79,7 @@ int APIENTRY wWinMain(
 		return 1;
 	}
 
-	// Main message loop:
+	// Main uMsg loop:
 	MSG msg;
 	BOOL bRet;
 
@@ -101,15 +102,15 @@ int APIENTRY wWinMain(
 	return (INT)msg.wParam;
 }
 
-LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
+LRESULT CALLBACK WndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
 	PAINTSTRUCT ps;
 	HDC hdc;
 	PWindowData pwd;
 
-	if (message == WM_CREATE)
+	if (uMsg == WM_CREATE)
 	{
-		pwd = malloc(sizeof(WindowData));
+		pwd = calloc(1, sizeof(WindowData));
 		if (pwd == NULL)
 		{
 			MessageBox(NULL,
@@ -117,7 +118,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 				_T("Something went wrong"),
 				MB_ICONERROR);
 			PostQuitMessage(-1);
-			return DefWindowProc(hWnd, message, wParam, lParam);
+			return DefWindowProc(hWnd, uMsg, wParam, lParam);
 		}
 
 		pwd->hWnd = hWnd;
@@ -125,8 +126,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 
 		hdc = GetDC(hWnd);
 
-		INT iHeight = -MulDiv(256, GetDeviceCaps(hdc, LOGPIXELSY), 72);
-		pwd->hfCapturingGlyph = CreateFont(iHeight, 0, 0, 0, FW_BOLD, 0, 0, 0, OEM_CHARSET,
+		INT iHeight = -MulDiv(256, GetDeviceCaps(hdc, LOGPIXELSY), 10);
+		pwd->hfCapturingGlyph = CreateFont(-50, 0, 0, 0, FW_BOLD, 0, 0, 0, OEM_CHARSET,
 			OUT_TT_ONLY_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY,
 			FF_DONTCARE, NULL);
 		if (pwd->hfCapturingGlyph == NULL)
@@ -137,11 +138,10 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 				_T("Something went wrong"),
 				MB_ICONERROR);
 			PostQuitMessage(-1);
-			return DefWindowProc(hWnd, message, wParam, lParam);
+			return DefWindowProc(hWnd, uMsg, wParam, lParam);
 		}
 
-		iHeight = -MulDiv(256, GetDeviceCaps(hdc, LOGPIXELSY), 10);
-		pwd->hfDrawing = CreateFont(iHeight, iHeight, 0, 0, FW_BOLD, 0, 0, 0, OEM_CHARSET,
+		pwd->hfDrawing = CreateFont(-10, -10, 0, 0, FW_BOLD, 0, 0, 0, OEM_CHARSET,
 			OUT_TT_ONLY_PRECIS, CLIP_DEFAULT_PRECIS, DEFAULT_QUALITY,
 			FIXED_PITCH | FF_DONTCARE, NULL);
 		if (pwd->hfDrawing == NULL)
@@ -153,7 +153,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 				_T("Something went wrong"),
 				MB_ICONERROR);
 			PostQuitMessage(-1);
-			return DefWindowProc(hWnd, message, wParam, lParam);
+			return DefWindowProc(hWnd, uMsg, wParam, lParam);
 		}
 
 		pwd->hfDefault = SelectObject(hdc, pwd->hfDrawing);
@@ -165,20 +165,138 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 
 	pwd = (PWindowData)GetWindowLongPtr(hWnd, 0);
 	if (!pwd)
-		return DefWindowProc(hWnd, message, wParam, lParam);
+		return DefWindowProc(hWnd, uMsg, wParam, lParam);
 
-	switch (message)
+	switch (uMsg)
 	{
-	case WM_DESTROY:
-		PostQuitMessage(0);
+	case WM_PAINT:
+	{
+		hdc = BeginPaint(hWnd, &ps);
+		if (pwd->szGlyph != NULL)
+		{
+			SelectObject(hdc, pwd->hfDrawing);
+
+			INT iErr = DrawText(hdc, pwd->szGlyph, -1, &ps.rcPaint, DT_CENTER);
+			if (!iErr)
+			{
+				MessageBox(NULL,
+					_T("Call to DrawText failed!"),
+					_T("Something went wrong"),
+					MB_ICONERROR);
+			}
+		}
+		else
+		{
+			DrawText(hdc, L"Press any character button", -1, &ps.rcPaint, DT_CENTER);
+		}
+
+		EndPaint(hWnd, &ps);
 		break;
+	}
+	case WM_CHAR:
+	{
+		hdc = GetDC(hWnd);
+
+		SelectObject(hdc, pwd->hfCapturingGlyph);
+
+		GLYPHMETRICS gm = { 0 };
+		MAT2 m2 = { 0 };
+		m2.eM11.value = 1;
+		m2.eM22.value = 1;
+		DWORD dwBufferSize = GetGlyphOutline(hdc, wParam, GGO_BITMAP, &gm, 0, NULL, &m2);
+		if (dwBufferSize == GDI_ERROR)
+		{
+			MessageBox(NULL,
+				_T("Call to GetGlyphOutline failed!"),
+				_T("Something went wrong"),
+				MB_ICONERROR);
+			return 0;
+		}
+
+		if (pwd->szGlyph != NULL)
+		{
+			free(pwd->szGlyph);
+			pwd->szGlyph = NULL;
+		}
+
+		PBYTE pbBuffer = calloc(dwBufferSize, sizeof(WCHAR));
+		if (pbBuffer == NULL)
+		{
+			MessageBox(NULL,
+				_T("Call to ñalloc failed!"),
+				_T("Something went wrong"),
+				MB_ICONERROR);
+			return 0;
+		}
+
+		DWORD dwErr = GetGlyphOutline(hdc, wParam, GGO_BITMAP, &gm, dwBufferSize, pbBuffer, &m2);
+		if (dwErr == GDI_ERROR)
+		{
+			MessageBox(NULL,
+				_T("Call to GetGlyphOutline failed!"),
+				_T("Something went wrong"),
+				MB_ICONERROR);
+			return 0;
+		}
+
+		DWORD dwGlyphBufferSize = dwBufferSize * dwBufferSize + 1;
+		pwd->szGlyph = calloc(dwGlyphBufferSize, sizeof(WCHAR));
+		if (pwd->szGlyph == NULL)
+		{
+			MessageBox(NULL,
+				_T("Call to ñalloc failed!"),
+				_T("Something went wrong"),
+				MB_ICONERROR);
+			free(pbBuffer);
+			return 0;
+		}
+
+		UINT uPosition = 0;
+		UINT uRowSize = (gm.gmBlackBoxX / 32);
+		uRowSize = ((gm.gmBlackBoxX % 32) ? (uRowSize + 1) : uRowSize) * 4;
+		PBYTE pbRow = pbBuffer;
+		for (UINT i = 0; i < gm.gmBlackBoxY; ++i) 
+		{
+			for (UINT j = 0; j < gm.gmBlackBoxX; ++j)
+			{
+				if ((pbRow[j / 8] >> (7 - j % 8)) & 0x01) 
+					pwd->szGlyph[uPosition] = (WCHAR)wParam;
+				else             
+					pwd->szGlyph[uPosition] = L' ';
+				++uPosition;
+			}
+			pbRow += uRowSize;
+			pwd->szGlyph[uPosition] = L'\n';
+			++uPosition;
+		}
+		pwd->szGlyph = realloc(pwd->szGlyph, (uPosition + 1) * sizeof(WCHAR));
+
+		ReleaseDC(hWnd, hdc);
+		InvalidateRect(hWnd, NULL, TRUE);
+		break;
+	}
 	case WM_GETMINMAXINFO:
-		LPMINMAXINFO lpWndInfo = lParam;
+	{
+		LPMINMAXINFO lpWndInfo = (LPMINMAXINFO)lParam;
 		lpWndInfo->ptMinTrackSize.x = 500;
 		lpWndInfo->ptMinTrackSize.y = 500;
 		break;
+	}
+	case WM_DESTROY:
+	{
+		hdc = GetDC(hWnd);
+		SelectObject(hdc, pwd->hfDefault);
+		DeleteObject(pwd->hfDrawing);
+		DeleteObject(pwd->hfCapturingGlyph);
+		if (pwd->szGlyph != NULL)
+			free(pwd->szGlyph);
+		free(pwd);
+		ReleaseDC(hWnd, hdc);
+		PostQuitMessage(0);
+		break;
+	}
 	default:
-		return DefWindowProc(hWnd, message, wParam, lParam);
+		return DefWindowProc(hWnd, uMsg, wParam, lParam);
 	}
 	return 0;
 }

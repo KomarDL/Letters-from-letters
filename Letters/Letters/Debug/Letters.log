@@ -1,4 +1,2 @@
 ﻿  Source.c
-H:\Проекты\Для себя\Letters-from-letters\Letters\Letters\Source.c(176,1): warning C4047: инициализация: "LPMINMAXINFO" отличается по уровням косвенного обращения от "LPARAM"
-H:\Проекты\Для себя\Letters-from-letters\Letters\Letters\Source.c(106,14): warning C4101: ps: неиспользованная локальная переменная
   Letters.vcxproj -> H:\Проекты\Для себя\Letters-from-letters\Letters\Debug\Letters.exe
